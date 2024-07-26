@@ -7,10 +7,14 @@ const path = require('path');
 const moment = require('moment');
 const cors = require('cors'); // Importar el paquete cors
 
+
+
 const app = express();
 const upload = multer({ dest: 'uploads/' });
 
-app.use(cors()); // Usar cors para permitir solicitudes desde cualquier origen
+// Usar el middleware CORS
+app.use(cors());
+
 
 // Conectar a la base de datos SQLite en un archivo
 const db = new sqlite3.Database('./database.db');
@@ -19,9 +23,11 @@ const db = new sqlite3.Database('./database.db');
 db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS books (
     isbn13 TEXT PRIMARY KEY, 
+    ISBN13_guiones TEXT, 
     titulo TEXT, 
     autor TEXT, 
     editorial TEXT, 
+    sello TEXT, 
     texto_bic_materia_destacada TEXT
   )`);
   
@@ -41,8 +47,8 @@ app.post('/upload', upload.single('file'), (req, res) => {
   fs.createReadStream(filePath)
     .pipe(csv({ separator: ';' }))
     .on('data', (row) => {
-      const { isbn13, titulo, autor, editorial, texto_bic_materia_destacada } = row;
-      db.run("INSERT INTO books (isbn13, titulo, autor, editorial, texto_bic_materia_destacada) VALUES (?, ?, ?, ?, ?)", [isbn13, titulo, autor, editorial, texto_bic_materia_destacada], function(err) {
+      const { isbn13, ISBN13_guiones, titulo, autor, editorial, sello, texto_bic_materia_destacada } = row;
+      db.run("INSERT INTO books (isbn13, ISBN13_guiones, titulo, autor, editorial, sello, texto_bic_materia_destacada) VALUES (?, ?, ?, ?, ?, ?, ?)", [isbn13, ISBN13_guiones, titulo, autor, editorial, sello, texto_bic_materia_destacada], function(err) {
         if (err) {
           return console.log(err.message);
         }
@@ -198,6 +204,167 @@ app.get('/months', (req, res) => {
     res.json(rows);
   });
 });
+
+
+
+
+// Endpoint para obtener ventas mensuales para un libro en un año específico
+app.get('/monthly-sales/book/:isbn13/:year', (req, res) => {
+  const { isbn13, year } = req.params;
+
+  const query = `
+    SELECT strftime('%Y-%m', fecha) as month, SUM(ventas) as total_sales
+    FROM sales
+    WHERE isbn13 = ? AND strftime('%Y', fecha) = ?
+    GROUP BY month
+    ORDER BY month
+  `;
+
+  db.all(query, [isbn13, year], (err, rows) => {
+    if (err) {
+      res.status(500).send(err.message);
+      return;
+    }
+    res.json(rows);
+  });
+});
+
+// Endpoint para obtener ventas semanales para un libro en un mes específico
+app.get('/weekly-sales/book/:isbn13/:month', (req, res) => {
+  const { isbn13, month } = req.params;
+
+  const query = `
+    SELECT strftime('%Y-%W', fecha) as week, SUM(ventas) as total_sales
+    FROM sales
+    WHERE isbn13 = ? AND strftime('%Y-%m', fecha) = ?
+    GROUP BY week
+    ORDER BY week
+  `;
+
+  db.all(query, [isbn13, month], (err, rows) => {
+    if (err) {
+      res.status(500).send(err.message);
+      return;
+    }
+    res.json(rows);
+  });
+});
+
+// Endpoint para obtener ventas semanales para un autor en un mes específico
+app.get('/weekly-sales/author/:author/:month', (req, res) => {
+  const { author, month } = req.params;
+
+  const query = `
+    SELECT strftime('%Y-%W', fecha) as week, SUM(ventas) as total_sales
+    FROM sales
+    JOIN books ON sales.isbn13 = books.isbn13
+    WHERE books.autor = ? AND strftime('%Y-%m', fecha) = ?
+    GROUP BY week
+    ORDER BY week
+  `;
+
+  db.all(query, [author, month], (err, rows) => {
+    if (err) {
+      res.status(500).send(err.message);
+      return;
+    }
+    res.json(rows);
+  });
+});
+
+// Endpoint para obtener ventas mensuales para un autor en un año específico
+app.get('/monthly-sales/author/:author/:year', (req, res) => {
+  const { author, year } = req.params;
+
+  const query = `
+    SELECT strftime('%Y-%m', fecha) as month, SUM(ventas) as total_sales
+    FROM sales
+    JOIN books ON sales.isbn13 = books.isbn13
+    WHERE books.autor = ? AND strftime('%Y', fecha) = ?
+    GROUP BY month
+    ORDER BY month
+  `;
+  db.all(query, [author, year], (err, rows) => {
+    if (err) {
+      res.status(500).send(err.message);
+      return;
+    }
+    res.json(rows);
+  });
+});
+
+// Endpoint para obtener ventas semanales para una editorial en un mes específico
+app.get('/weekly-sales/editorial/:editorial/:month', (req, res) => {
+  const { editorial, month } = req.params;
+  const decodedEditorial = decodeURIComponent(editorial);
+
+  const query = `
+    SELECT strftime('%Y-%W', fecha) as week, SUM(ventas) as total_sales
+    FROM sales
+    JOIN books ON sales.isbn13 = books.isbn13
+    WHERE books.editorial = ? AND strftime('%Y-%m', fecha) = ?
+    GROUP BY week
+    ORDER BY week
+  `;
+
+  db.all(query, [decodedEditorial, month], (err, rows) => {
+    if (err) {
+      res.status(500).send(err.message);
+      return;
+    }
+    res.json(rows);
+  });
+});
+
+
+// Endpoint para obtener ventas mensuales para una editorial en un año específico
+app.get('/monthly-sales/editorial/:editorial/:year', (req, res) => {
+  const { editorial, year } = req.params;
+  const decodedEditorial = decodeURIComponent(editorial);
+
+  const query = `
+    SELECT strftime('%Y-%m', fecha) as month, SUM(ventas) as total_sales
+    FROM sales
+    JOIN books ON sales.isbn13 = books.isbn13
+    WHERE books.editorial = ? AND strftime('%Y', fecha) = ?
+    GROUP BY month
+    ORDER BY month
+  `;
+
+  db.all(query, [decodedEditorial, year], (err, rows) => {
+    if (err) {
+      res.status(500).send(err.message);
+      return;
+    }
+    res.json(rows);
+  });
+});
+
+
+// Endpoint para obtener ventas semanales para una materia destacada en un mes específico
+app.get('/weekly-sales/materia/:materia/:month', (req, res) => {
+  const { materia, month } = req.params;
+  const decodedMateria = decodeURIComponent(materia);
+
+  const query = `
+    SELECT strftime('%Y-%W', fecha) as week, SUM(ventas) as total_sales
+    FROM sales
+    JOIN books ON sales.isbn13 = books.isbn13
+    WHERE books.texto_bic_materia_destacada = ? AND strftime('%Y-%m', fecha) = ?
+    GROUP BY week
+    ORDER BY week
+  `;
+
+  db.all(query, [decodedMateria, month], (err, rows) => {
+    if (err) {
+      res.status(500).send(err.message);
+      return;
+    }
+    res.json(rows);
+  });
+});
+
+
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
