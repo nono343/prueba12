@@ -5,9 +5,12 @@ const sqlite3 = require('sqlite3').verbose();
 const fs = require('fs');
 const path = require('path');
 const moment = require('moment');
+const cors = require('cors'); // Importar el paquete cors
 
 const app = express();
 const upload = multer({ dest: 'uploads/' });
+
+app.use(cors()); // Usar cors para permitir solicitudes desde cualquier origen
 
 // Conectar a la base de datos SQLite en un archivo
 const db = new sqlite3.Database('./database.db');
@@ -16,11 +19,9 @@ const db = new sqlite3.Database('./database.db');
 db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS books (
     isbn13 TEXT PRIMARY KEY, 
-    ISBN13_guiones TEXT, 
     titulo TEXT, 
     autor TEXT, 
     editorial TEXT, 
-    sello TEXT, 
     texto_bic_materia_destacada TEXT
   )`);
   
@@ -40,8 +41,8 @@ app.post('/upload', upload.single('file'), (req, res) => {
   fs.createReadStream(filePath)
     .pipe(csv({ separator: ';' }))
     .on('data', (row) => {
-      const { isbn13, ISBN13_guiones, titulo, autor, editorial, sello, texto_bic_materia_destacada } = row;
-      db.run("INSERT INTO books (isbn13, ISBN13_guiones, titulo, autor, editorial, sello, texto_bic_materia_destacada) VALUES (?, ?, ?, ?, ?, ?, ?)", [isbn13, ISBN13_guiones, titulo, autor, editorial, sello, texto_bic_materia_destacada], function(err) {
+      const { isbn13, titulo, autor, editorial, texto_bic_materia_destacada } = row;
+      db.run("INSERT INTO books (isbn13, titulo, autor, editorial, texto_bic_materia_destacada) VALUES (?, ?, ?, ?, ?)", [isbn13, titulo, autor, editorial, texto_bic_materia_destacada], function(err) {
         if (err) {
           return console.log(err.message);
         }
